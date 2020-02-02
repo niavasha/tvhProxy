@@ -1,11 +1,13 @@
 from gevent import monkey; monkey.patch_all()
 
+import sched
 import time
 import os
 import requests
 import threading
 import socket
 import logging
+import xml.etree.ElementTree as ElementTree
 from gevent.pywsgi import WSGIServer
 from flask import Flask, Response, request, jsonify, abort, render_template
 from ssdp import SSDPServer
@@ -15,6 +17,8 @@ logging.basicConfig(level=logging.DEBUG)
 load_dotenv(verbose=True)
 
 app = Flask(__name__)
+scheduler = sched.scheduler()
+logger = logging.getLogger()
 
 host_name = socket.gethostname()
 host_ip = socket.gethostbyname(host_name) 
@@ -98,6 +102,28 @@ def _get_channels():
         logger.error('An error occured: %s' + repr(e))
 
 
+def _sync_xmltv():
+    url = '%s/xmltv/channels' % config['tvhURL']
+    logger.debug('downloading xmltv from %s', url)
+    r = requests.get(url)
+    tree = ElementTree.ElementTree(
+        ElementTree.fromstring(requests.get(url).content))
+    root = tree.getroot()
+    channelNumbers = {}
+    for child in root:
+        if child.tag == 'channel':
+            channelId = child.attrib['id']
+            channelNo = child[1].text
+            channelNumbers[channelId] = channelNo
+
+            child.remove(child[1])
+            child.attrib['id'] = channelNo
+        if child.tag == 'programme':
+            child.attrib['channel'] = channelNumbers[child.attrib['channel']]
+    tree.write("tvhProxy.xml")
+    scheduler.enter(60, 1, _sync_xmltv)
+
+
 def _start_ssdp():
 	ssdp = SSDPServer()
 	thread_ssdp = threading.Thread(target=ssdp.run, args=())
@@ -113,4 +139,5 @@ def _start_ssdp():
 if __name__ == '__main__':
     http = WSGIServer((config['bindAddr'], config['tvhProxyPort']), app.wsgi_app)
     _start_ssdp()
+    _sync_xmltv()
     http.serve_forever()
