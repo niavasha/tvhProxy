@@ -189,7 +189,7 @@ class SSDPServer:
 
         resp.extend(map(lambda x: ': '.join(x), stcpy.items()))
         resp.extend(('', ''))
-        logger.debug('do_notify content', resp)
+        logger.debug('do_notify content: %s', resp)
         try:
             self.sock.sendto('\r\n'.join(resp).encode(), (SSDP_ADDR, SSDP_PORT))
             self.sock.sendto('\r\n'.join(resp).encode(), (SSDP_ADDR, SSDP_PORT))
@@ -216,7 +216,7 @@ class SSDPServer:
             del stcpy['last-seen']
             resp.extend(map(lambda x: ': '.join(x), stcpy.items()))
             resp.extend(('', ''))
-            logger.debug('do_byebye content', resp)
+            logger.debug('do_byebye content: %s', resp)
             if self.sock:
                 try:
                     self.sock.sendto('\r\n'.join(resp), (SSDP_ADDR, SSDP_PORT))
