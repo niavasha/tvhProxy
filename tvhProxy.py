@@ -3,18 +3,28 @@ from gevent import monkey; monkey.patch_all()
 import time
 import os
 import requests
+import socket
 import logging
 from gevent.pywsgi import WSGIServer
 from flask import Flask, Response, request, jsonify, abort, render_template
+from dotenv import load_dotenv
+
 logging.basicConfig(level=logging.DEBUG)
+load_dotenv(verbose=True)
 
 app = Flask(__name__)
 
+host_name = socket.gethostname()
+host_ip = socket.gethostbyname(host_name) 
+
 # URL format: <protocol>://<username>:<password>@<hostname>:<port>, example: https://test:1234@localhost:9981
 config = {
+    'deviceID': os.environ.get('DEVICE_ID') or '12345678',
     'bindAddr': os.environ.get('TVH_BINDADDR') or '',
     'tvhURL': os.environ.get('TVH_URL') or 'http://test:test@localhost:9981',
-    'tvhProxyURL': os.environ.get('TVH_PROXY_URL') or 'http://localhost',
+    'tvhProxyURL': os.environ.get('TVH_PROXY_URL'), # only used if set (in case of forward-proxy), otherwise assembled from host + port bel
+    'tvhProxyHost': os.environ.get('TVH_PROXY_HOST') or host_ip,
+    'tvhProxyPort': os.environ.get('TVH_PROXY_PORT') or 5004,
     'tunerCount': os.environ.get('TVH_TUNER_COUNT') or 6,  # number of tuners in tvh
     'tvhWeight': os.environ.get('TVH_WEIGHT') or 300,  # subscription priority
     'chunkSize': os.environ.get('TVH_CHUNK_SIZE') or 1024*1024,  # usually you don't need to edit this
@@ -28,10 +38,10 @@ discoverData = {
     'FirmwareName': 'hdhomeruntc_atsc',
     'TunerCount': int(config['tunerCount']),
     'FirmwareVersion': '20150826',
-    'DeviceID': '12345678',
+    'DeviceID': config['deviceID'], 
     'DeviceAuth': 'test1234',
-    'BaseURL': '%s' % config['tvhProxyURL'],
-    'LineupURL': '%s/lineup.json' % config['tvhProxyURL']
+    'BaseURL': '%s' % (config['tvhProxyURL'] or "http://" + config['tvhProxyHost'] + ":" + str(config['tvhProxyPort'])),
+    'LineupURL': '%s/lineup.json' % (config['tvhProxyURL'] or "http://" + config['tvhProxyHost'] + ":" + str(config['tvhProxyPort']))
 }
 
 @app.route('/discover.json')
@@ -87,5 +97,5 @@ def _get_channels():
 
 
 if __name__ == '__main__':
-    http = WSGIServer((config['bindAddr'], 5004), app.wsgi_app)
+    http = WSGIServer((config['bindAddr'], config['tvhProxyPort']), app.wsgi_app)
     http.serve_forever()
