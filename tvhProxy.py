@@ -3,10 +3,12 @@ from gevent import monkey; monkey.patch_all()
 import time
 import os
 import requests
+import threading
 import socket
 import logging
 from gevent.pywsgi import WSGIServer
 from flask import Flask, Response, request, jsonify, abort, render_template
+from ssdp import SSDPServer
 from dotenv import load_dotenv
 
 logging.basicConfig(level=logging.DEBUG)
@@ -96,6 +98,19 @@ def _get_channels():
         logger.error('An error occured: %s' + repr(e))
 
 
+def _start_ssdp():
+	ssdp = SSDPServer()
+	thread_ssdp = threading.Thread(target=ssdp.run, args=())
+	thread_ssdp.daemon = True # Daemonize thread
+	thread_ssdp.start()
+	ssdp.register('local',
+				  'uuid:{}::upnp:rootdevice'.format(discoverData['DeviceID']),
+				  'upnp:rootdevice',
+				  'http://{}:{}/device.xml'.format(config['tvhProxyHost'],config['tvhProxyPort']),
+                  'SSDP Server for tvhProxy')
+
+
 if __name__ == '__main__':
     http = WSGIServer((config['bindAddr'], config['tvhProxyPort']), app.wsgi_app)
+    _start_ssdp()
     http.serve_forever()
