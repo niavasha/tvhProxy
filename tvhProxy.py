@@ -3,8 +3,10 @@ from gevent import monkey; monkey.patch_all()
 import time
 import os
 import requests
+import logging
 from gevent.pywsgi import WSGIServer
 from flask import Flask, Response, request, jsonify, abort, render_template
+logging.basicConfig(level=logging.DEBUG)
 
 app = Flask(__name__)
 
@@ -81,7 +83,7 @@ def _get_channels():
         return r.json()['entries']
 
     except Exception as e:
-        print('An error occured: ' + repr(e))
+        logger.error('An error occured: %s' + repr(e))
 
 
 if __name__ == '__main__':
