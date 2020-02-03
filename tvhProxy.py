@@ -13,7 +13,7 @@ from flask import Flask, Response, request, jsonify, abort, render_template
 from ssdp import SSDPServer
 from dotenv import load_dotenv
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 load_dotenv(verbose=True)
 
 app = Flask(__name__)
@@ -104,7 +104,7 @@ def _get_channels():
 
 def _sync_xmltv():
     url = '%s/xmltv/channels' % config['tvhURL']
-    logger.debug('downloading xmltv from %s', url)
+    logger.info('downloading xmltv from %s', url)
     r = requests.get(url)
     tree = ElementTree.ElementTree(
         ElementTree.fromstring(requests.get(url).content))
@@ -137,7 +137,7 @@ def _start_ssdp():
 
 
 if __name__ == '__main__':
-    http = WSGIServer((config['bindAddr'], config['tvhProxyPort']), app.wsgi_app)
+    http = WSGIServer((config['bindAddr'], config['tvhProxyPort']), app.wsgi_app, log=logger, error_log=logger)
     _start_ssdp()
     _sync_xmltv()
     http.serve_forever()
