@@ -105,23 +105,27 @@ def _get_channels():
 def _sync_xmltv():
     url = '%s/xmltv/channels' % config['tvhURL']
     logger.info('downloading xmltv from %s', url)
-    r = requests.get(url)
-    tree = ElementTree.ElementTree(
-        ElementTree.fromstring(requests.get(url).content))
-    root = tree.getroot()
-    channelNumbers = {}
-    for child in root:
-        if child.tag == 'channel':
-            channelId = child.attrib['id']
-            channelNo = child[1].text
-            channelNumbers[channelId] = channelNo
-
-            child.remove(child[1])
-            child.attrib['id'] = channelNo
-        if child.tag == 'programme':
-            child.attrib['channel'] = channelNumbers[child.attrib['channel']]
-    tree.write("tvhProxy.xml")
-    scheduler.enter(60, 1, _sync_xmltv)
+    try:
+        r = requests.get(url)
+        tree = ElementTree.ElementTree(
+            ElementTree.fromstring(requests.get(url).content))
+        root = tree.getroot()
+        channelNumbers = {}
+        for child in root:
+            if child.tag == 'channel':
+                channelId = child.attrib['id']
+                channelNo = child[1].text
+                channelNumbers[channelId] = channelNo
+                child.remove(child[1])
+                child.attrib['id'] = channelNo
+            if child.tag == 'programme':
+                child.attrib['channel'] = channelNumbers[child.attrib['channel']]
+        tree.write("tvhProxy.xml")
+    except requests.exceptions.RequestException as e:  # This is the correct syntax
+        logger.error('An error occured: %s' + repr(e))
+    
+    scheduler.enter(60*60, 1, _sync_xmltv) # update every hour (60*60 seconds)
+    scheduler.run(blocking=True)
 
 
 def _start_ssdp():
@@ -138,6 +142,6 @@ def _start_ssdp():
 
 if __name__ == '__main__':
     http = WSGIServer((config['bindAddr'], config['tvhProxyPort']), app.wsgi_app, log=logger, error_log=logger)
+    http.start()
     _start_ssdp()
     _sync_xmltv()
-    http.serve_forever()
