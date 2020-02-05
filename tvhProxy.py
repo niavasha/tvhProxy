@@ -7,6 +7,7 @@ import requests
 import threading
 import socket
 import logging
+from datetime import timedelta, datetime, time
 import xml.etree.ElementTree as ElementTree
 from gevent.pywsgi import WSGIServer
 from flask import Flask, Response, request, jsonify, abort, render_template
@@ -39,7 +40,7 @@ config = {
 
 discoverData = {
     'FriendlyName': 'tvhProxy',
-    'Manufacturer' : 'Silicondust',
+    'Manufacturer': 'Silicondust',
     'ModelNumber': 'HDTC-2US',
     'FirmwareName': 'hdhomeruntc_atsc',
     'TunerCount': int(config['tunerCount']),
@@ -59,7 +60,7 @@ def discover():
 def status():
     return jsonify({
         'ScanInProgress': 0,
-        'ScanPossible': 1,
+        'ScanPossible': 0,
         'Source': "Cable",
         'SourceList': ['Cable']
     })
@@ -85,10 +86,16 @@ def lineup():
 def lineup_post():
     return ''
 
+
 @app.route('/')
 @app.route('/device.xml')
 def device():
-    return render_template('device.xml',data = discoverData),{'Content-Type': 'application/xml'}
+    return render_template('device.xml', data=discoverData), {'Content-Type': 'application/xml'}
+
+
+@app.route('/epg.xml')
+def epg():
+    return _get_xmltv(), {'Content-Type': 'application/xml'}
 
 
 def _get_channels():
@@ -102,7 +109,7 @@ def _get_channels():
         logger.error('An error occured: %s' + repr(e))
 
 
-def _sync_xmltv():
+def _get_xmltv():
     url = '%s/xmltv/channels' % config['tvhURL']
     logger.info('downloading xmltv from %s', url)
     try:
@@ -110,38 +117,67 @@ def _sync_xmltv():
         tree = ElementTree.ElementTree(
             ElementTree.fromstring(requests.get(url).content))
         root = tree.getroot()
-        channelNumbers = {}
+        channelNumberMapping = {}
+        channelsInEPG = {}
         for child in root:
             if child.tag == 'channel':
                 channelId = child.attrib['id']
                 channelNo = child[1].text
-                channelNumbers[channelId] = channelNo
+                channelNumberMapping[channelId] = channelNo
+                if channelNo in channelsInEPG:
+                    logger.error("duplicate channelNo: %s", channelNo)
+                channelsInEPG[channelNo] = False
                 child.remove(child[1])
                 child.attrib['id'] = channelNo
             if child.tag == 'programme':
-                child.attrib['channel'] = channelNumbers[child.attrib['channel']]
-        tree.write("tvhProxy.xml")
+                child.attrib['channel'] = channelNumberMapping[child.attrib['channel']]
+                channelsInEPG[child.attrib['channel']] = True
+        for key in sorted(channelsInEPG):
+            if channelsInEPG[key]:
+                logger.debug("Programmes found for channel %s", key)
+            else:
+                channelName = root.find(
+                    'channel[@id="'+key+'"]/display-name').text
+                logger.error("No programme for channel %s: %s",
+                             key, channelName)
+
+                # create 2h programmes for 72 hours
+                yesterday_midnight = datetime.combine(datetime.today(), time.min) - timedelta(days=1)
+                date_format = '%Y%m%d%H%M%S'
+
+                for x in range(0, 36):
+                    dummyProgramme = ElementTree.SubElement(root, 'programme')
+                    dummyProgramme.attrib['channel'] = str(key)
+                    dummyProgramme.attrib['start'] = (yesterday_midnight + timedelta(hours=x*2)).strftime(date_format)
+                    dummyProgramme.attrib['stop'] = (yesterday_midnight + timedelta(hours=(x*2)+2)).strftime(date_format)
+                    dummyTitle = ElementTree.SubElement(dummyProgramme, 'title')
+                    dummyTitle.attrib['lang'] = 'eng'
+                    dummyTitle.text = channelName
+                    dummyDesc = ElementTree.SubElement(dummyProgramme, 'desc')
+                    dummyDesc.attrib['lang'] = 'eng'
+                    dummyDesc.text = "No programming information"
+
+        logger.info("returning epg")
+        return ElementTree.tostring(root)
     except requests.exceptions.RequestException as e:  # This is the correct syntax
         logger.error('An error occured: %s' + repr(e))
     
-    scheduler.enter(60*60, 1, _sync_xmltv) # update every hour (60*60 seconds)
-    scheduler.run(blocking=True)
-
 
 def _start_ssdp():
-	ssdp = SSDPServer()
-	thread_ssdp = threading.Thread(target=ssdp.run, args=())
-	thread_ssdp.daemon = True # Daemonize thread
-	thread_ssdp.start()
-	ssdp.register('local',
-				  'uuid:{}::upnp:rootdevice'.format(discoverData['DeviceID']),
-				  'upnp:rootdevice',
-				  'http://{}:{}/device.xml'.format(config['tvhProxyHost'],config['tvhProxyPort']),
+    ssdp = SSDPServer()
+    thread_ssdp = threading.Thread(target=ssdp.run, args=())
+    thread_ssdp.daemon = True  # Daemonize thread
+    thread_ssdp.start()
+    ssdp.register('local',
+                  'uuid:{}::upnp:rootdevice'.format(discoverData['DeviceID']),
+                  'upnp:rootdevice',
+                  'http://{}:{}/device.xml'.format(
+                      config['tvhProxyHost'], config['tvhProxyPort']),
                   'SSDP Server for tvhProxy')
 
 
 if __name__ == '__main__':
-    http = WSGIServer((config['bindAddr'], config['tvhProxyPort']), app.wsgi_app, log=logger, error_log=logger)
-    http.start()
+    http = WSGIServer((config['bindAddr'], config['tvhProxyPort']),
+                      app.wsgi_app, log=logger, error_log=logger)
     _start_ssdp()
-    _sync_xmltv()
+    http.serve_forever()
