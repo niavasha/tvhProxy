@@ -128,6 +128,8 @@ def _get_xmltv():
                     logger.error("duplicate channelNo: %s", channelNo)
                 channelsInEPG[channelNo] = False
                 child.remove(child[1])
+                # FIXME: properly rewrite with TVH_URL or even proxy
+                child[1].attrib['src'] = child[1].attrib['src']+".png"
                 child.attrib['id'] = channelNo
             if child.tag == 'programme':
                 child.attrib['channel'] = channelNumberMapping[child.attrib['channel']]
