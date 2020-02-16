@@ -1,10 +1,11 @@
 [Unit]
 Description=A simple proxy for Plex and Tvheadend
+After=syslog.target network.target tvheadend.service
 
 [Service]
 Environment=
-WorkingDirectory=/home/tvh/tvhProxy/
-ExecStart=/home/tvh/tvhProxy/venv/bin/python /home/tvh/tvhProxy/tvhProxy.py
+WorkingDirectory=/srv/home/hts/tvhProxy/
+ExecStart=/home/hts/tvhProxy/tvhProxy.sh
 Restart=always
 
 [Install]
