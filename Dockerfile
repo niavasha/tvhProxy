@@ -4,7 +4,6 @@ ENV UID=1000
 ENV GID=1000
 
 RUN BUILD_DEPS=" \
-    git \
     gcc \
     musl-dev \
     python2-dev \
@@ -15,7 +14,7 @@ RUN BUILD_DEPS=" \
     && mkdir /app \
     && addgroup -g $GID -S flask \
     && adduser -u $UID -D -S -h /app -s /sbin/nologin -G flask flask \
-    && git clone https://github.com/Dids/tvhProxy /app \
+    && copy ./ /app \
     && cd /app \
     && pip install -r requirements.txt \
     && chown -R flask:flask /app \
