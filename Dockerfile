@@ -1,5 +1,7 @@
 FROM python:3.7-alpine
 
+RUN apk add --no-cache gcc
+
 WORKDIR /usr/src/app
 
 COPY requirements.txt ./
