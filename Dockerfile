@@ -1,32 +1,14 @@
-FROM alpine:3.6
+FROM python:3-alpine
 
-ENV UID=1000
-ENV GID=1000
+WORKDIR /usr/src/app
 
-RUN BUILD_DEPS=" \
-        gcc \
-        musl-dev \
-        python2-dev \
-        py-pip" \
-    && apk -U upgrade && apk add \
-        ${BUILD_DEPS} \
-        python
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
-COPY ./ /app
-
-WORKDIR /app
-
-RUN pip install -r requirements.txt \
-    && addgroup -g $GID -S flask \
-    && adduser -u $UID -D -S -h /app -s /sbin/nologin -G flask flask \
-    && chown -R flask:flask /app \
-    && apk del ${BUILD_DEPS} \
-    && rm -rf /var/cache/apk/* \
-    && rm -rf /tmp/*
+COPY . .
 
 VOLUME /app
 
 EXPOSE 5004
 
-ENTRYPOINT ["/usr/bin/python"]
-CMD ["/app/tvhProxy.py"]
+CMD [ "python", "./tvhProxy.py" ]
