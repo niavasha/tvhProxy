@@ -18,7 +18,7 @@ WORKDIR /app
 
 RUN pip install -r requirements.txt \
     && addgroup -g $GID -S flask \
-    && adduser -u $UID -D -S -h /app -s /sbin/nologin -G flask flask
+    && adduser -u $UID -D -S -h /app -s /sbin/nologin -G flask flask \
     && chown -R flask:flask /app \
     && apk del ${BUILD_DEPS} \
     && rm -rf /var/cache/apk/* \
