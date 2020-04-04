@@ -7,7 +7,7 @@ RUN apk add --no-cache \
       python2-dev \
     && python -m venv /opt/venv
     
-# Make sure we use the virtualenv:
+# Make sure we use the virtualenv.
 ENV PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /usr/src/app
@@ -19,8 +19,8 @@ FROM python:3.7-alpine
 
 COPY --from=builder /opt/venv /opt/venv
 
-# Make sure scripts in .local are usable:
-ENV PATH=/root/.local/bin:$PATH
+# Make sure we use the virtualenv.
+ENV PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /usr/src/app
 
