@@ -10,16 +10,15 @@ RUN BUILD_DEPS=" \
         py-pip" \
     && apk -U upgrade && apk add \
         ${BUILD_DEPS} \
-        python \
-    && mkdir /app \
-    && addgroup -g $GID -S flask \
-    && adduser -u $UID -D -S -h /app -s /sbin/nologin -G flask flask
+        python
+
+COPY ./ /app
 
 WORKDIR /app
 
-COPY ./ /
-
 RUN pip install -r requirements.txt \
+    && addgroup -g $GID -S flask \
+    && adduser -u $UID -D -S -h /app -s /sbin/nologin -G flask flask
     && chown -R flask:flask /app \
     && apk del ${BUILD_DEPS} \
     && rm -rf /var/cache/apk/* \
