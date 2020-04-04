@@ -24,3 +24,5 @@ A startup script for Ubuntu can be found in tvhProxy.service (change paths and u
 
 #### Plex configuration
 Enter the IP of the host running tvhProxy including port 5004, eg.: ```192.168.1.50:5004```, use ```http://192.168.1.50:5004/epg.xml``` for the EPG (see [Using XMLTV for guide data](https://support.plex.tv/articles/using-an-xmltv-guide/) for full instructions).
+
+NickNote: This seems to cause an exception in tvhProxy. Simply using the tvheadend xml guide url also works: `http://user:password@192.168.1.50:9981/xmltv/channels`
