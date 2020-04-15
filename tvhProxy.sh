@@ -1,4 +1,7 @@
 #!/bin/bash
+if [ -f .env ] ; then 
+    source .env
+fi
 
 DIR=$(dirname $0)
 cd $DIR 
