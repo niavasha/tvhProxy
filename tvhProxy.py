@@ -1,3 +1,7 @@
+#!/usr/bin/env python
+from gevent import monkey
+monkey.patch_all()
+
 from dotenv import load_dotenv
 from ssdp import SSDPServer
 from flask import Flask, Response, request, jsonify, abort, render_template
@@ -8,19 +12,21 @@ import logging
 import socket
 import threading
 import requests
+from requests.auth import HTTPDigestAuth
 import os
 import time
 import sched
-from gevent import monkey
-monkey.patch_all()
 
-
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 load_dotenv(verbose=True)
 
 app = Flask(__name__)
 scheduler = sched.scheduler()
+
+log_format = "[%(asctime)s: %(levelname)s/%(process)s:%(thread)s] %(name)s:%(funcName)s:%(lineno)d - %(message)s"
 logger = logging.getLogger()
+logger.propagate = True
+logger.setLevel(10)
 
 host_name = socket.gethostname()
 host_ip = socket.gethostbyname(host_name)
@@ -29,7 +35,10 @@ host_ip = socket.gethostbyname(host_name)
 config = {
     'deviceID': os.environ.get('DEVICE_ID') or '12345678',
     'bindAddr': os.environ.get('TVH_BINDADDR') or '',
-    'tvhURL': os.environ.get('TVH_URL') or 'http://test:test@localhost:9981',
+    'tvhURL': os.environ.get('TVH_URL') or 'http://localhost:9981',
+    'tvhUser': os.environ.get('TVH_USER') or 'test',
+    'tvhPassword': os.environ.get('TVH_PASSWORD') or 'test',
+
     # only used if set (in case of forward-proxy), otherwise assembled from host + port bel
     'tvhProxyURL': os.environ.get('TVH_PROXY_URL'),
     'tvhProxyHost': os.environ.get('TVH_PROXY_HOST') or host_ip,
@@ -108,21 +117,36 @@ def epg():
 def _get_channels():
     url = '%s/api/channel/grid?start=0&limit=999999' % config['tvhURL']
     logger.info('downloading channels from %s', url)
+    
     try:
-        r = requests.get(url)
-        return r.json()['entries']
+        r = requests.get(url, auth=HTTPDigestAuth(config['tvhUser'], config['tvhPassword']))
+        r.raise_for_status()
+    except requests.exceptions.Timeout:
+        # Maybe set up for a retry, or continue in a retry loop
+        logger.info('Timeout received from %s', url)
+    except requests.exceptions.TooManyRedirects:
+        # Tell the user their URL was bad and try a different one
+        logger.info('Too many redirects received from %s', url)
+    except requests.exceptions.HTTPError as e:
+        raise SystemExit(e)
+    except requests.exceptions.RequestException as e:
+        # catastrophic error. bail.
+        raise SystemExit(e)
 
-    except Exception as e:
-        logger.error('An error occured: %s' + repr(e))
+    return r.json()['entries']
+
+    #except Exception as e:
+    #    logger.error('An error occured: %s' + repr(e))
 
 
 def _get_xmltv():
     url = '%s/xmltv/channels' % config['tvhURL']
     logger.info('downloading xmltv from %s', url)
     try:
-        r = requests.get(url)
+        r = requests.get(url, auth=HTTPDigestAuth(config['tvhUser'], config['tvhPassword']))
+        r.raise_for_status()
         tree = ElementTree.ElementTree(
-            ElementTree.fromstring(requests.get(url).content))
+            ElementTree.fromstring(requests.get(url, auth=HTTPDigestAuth(config['tvhUser'], config['tvhPassword'])).content))
         root = tree.getroot()
         channelNumberMapping = {}
         channelsInEPG = {}
@@ -172,6 +196,17 @@ def _get_xmltv():
 
         logger.info("returning epg")
         return ElementTree.tostring(root)
+    except requests.exceptions.Timeout:
+        # Maybe set up for a retry, or continue in a retry loop
+        logger.info('Timeout received from %s', url)
+    except requests.exceptions.TooManyRedirects:
+        # Tell the user their URL was bad and try a different one
+        logger.info('Too many redirects received from %s', url)
+    except requests.exceptions.HTTPError as e:
+        raise SystemExit(e)
+    except requests.exceptions.RequestException as e:
+        # catastrophic error. bail.
+        raise SystemExit(e)
     except requests.exceptions.RequestException as e:  # This is the correct syntax
         logger.error('An error occured: %s' + repr(e))
 
@@ -192,5 +227,6 @@ def _start_ssdp():
 if __name__ == '__main__':
     http = WSGIServer((config['bindAddr'], config['tvhProxyPort']),
                       app.wsgi_app, log=logger, error_log=logger)
-    _start_ssdp()
+    logger.info('Starting server on host %s port %d.',config['bindAddr'], config['tvhProxyPort'])
+    #_start_ssdp()
     http.serve_forever()
